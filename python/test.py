@@ -4,7 +4,7 @@ import random
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
-def voxel_downsample(point_cloud, voxel_size=3.0):
+def voxel_downsample(point_cloud, voxel_size=2.0):
     return point_cloud.voxel_down_sample(voxel_size=voxel_size)
 
 def region_growing(point_cloud, k_neighbors=30, normal_threshold=0.95, min_cluster_size=10):
@@ -140,8 +140,9 @@ def extract_pointcloud_boundaries(point_cloud, clusters, curvature_threshold=0.0
 
 
 
-def extract_concave_convex_patches_with_labels(point_cloud, K_thresh=0.005, H_thresh=0.01, neighbor_radius=5):
+def extract_concave_convex_patches_with_labels(point_cloud, K_thresh=0.005, H_thresh=0.01, neighbor_radius=5, min_neighbors=6, min_cluster_size=20):
     print("Extracting and clustering concave and convex patches...")
+    print(f"Using parameters: min_neighbors={min_neighbors}, min_cluster_size={min_cluster_size}")
 
     point_cloud.estimate_normals(
         search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=1.0, max_nn=30)
@@ -156,7 +157,7 @@ def extract_concave_convex_patches_with_labels(point_cloud, K_thresh=0.005, H_th
     # 1. Curvature-based classification
     for i in range(n_points):
         [_, idx, _] = kdtree.search_radius_vector_3d(point_cloud.points[i], neighbor_radius)
-        if len(idx) < 6:
+        if len(idx) < min_neighbors:
             continue
         neighbors = points[idx]
         cov = np.cov(neighbors.T)
@@ -194,7 +195,7 @@ def extract_concave_convex_patches_with_labels(point_cloud, K_thresh=0.005, H_th
                         visited[ni] = True
                         queue.append(ni)
 
-            if len(cluster) >= 20:  # minimum patch size
+            if len(cluster) >= min_cluster_size:  # minimum patch size
                 clustered.append(cluster)
 
         return clustered
@@ -213,9 +214,9 @@ def extract_concave_convex_patches_with_labels(point_cloud, K_thresh=0.005, H_th
     convex_colors = get_distinct_colors(len(convex_clusters), "tab20")
 
     for i, cluster in enumerate(concave_clusters):
-        color = concave_colors[i]
-        for idx in cluster:
-            colors[idx] = color
+       color = concave_colors[i]
+       for idx in cluster:
+        colors[idx] = color
 
     for i, cluster in enumerate(convex_clusters):
         color = convex_colors[i]
@@ -248,7 +249,7 @@ def visualize_boundaries(point_cloud, line_sets):
 
 if __name__ == "__main__":
     print("Loading point cloud...")
-    point_cloud = o3d.io.read_point_cloud("C:/sem7/FYP/Tombstone/ply/Tombstone1_low.ply")
+    point_cloud = o3d.io.read_point_cloud("C:/sem7/FYP/Reassembly/tombstone-parts/1 - 2.ply")
 
     if point_cloud.is_empty():
         print("Error: Point cloud is empty or could not be loaded.")
@@ -266,8 +267,16 @@ if __name__ == "__main__":
     visualize_boundaries(point_cloud, line_sets)
 
     # After region growing or voxel downsampling
-    # Extract and visualize patches
-    patch_colored_cloud = extract_concave_convex_patches_with_labels(point_cloud)
+    # Extract and visualize patches with configurable parameters
+    patch_colored_cloud = extract_concave_convex_patches_with_labels(
+        point_cloud,
+        K_thresh=0.003,     # Moderate threshold for curvature detection
+        H_thresh=0.005,     # Moderate threshold for mean curvature
+        neighbor_radius=5,   # Balanced radius for neighborhood
+        min_neighbors=8,     # Reduced but still reliable neighbor count
+        min_cluster_size=25  # Moderate minimum patch size
+    )
     o3d.visualization.draw_geometries([patch_colored_cloud])
 
     print("Done!")
+
